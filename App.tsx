@@ -63,13 +63,15 @@ const LoginPage = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
           
           // Fetch user profile from database with timeout
           try {
-            const profilePromise = supabase
+            const queryPromise = supabase
               .from('profiles')
               .select('*')
               .eq('id', data.user.id)
               .single();
             
-            const { data: profile, error: profileError } = await Promise.race([profilePromise, timeoutPromise]) as any;
+            // Race the actual query execution
+            const result = await Promise.race([queryPromise, timeoutPromise]);
+            const { data: profile, error: profileError } = result;
             
             console.log('Profile fetch result:', { profile, profileError });
 
@@ -133,13 +135,15 @@ const LoginPage = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
           
           // Fetch user profile from database with timeout
           try {
-            const profilePromise = supabase
+            const queryPromise = supabase
               .from('profiles')
               .select('*')
               .eq('id', data.user.id)
               .single();
             
-            const { data: profile, error: profileError } = await Promise.race([profilePromise, timeoutPromise]) as any;
+            // Race the actual query execution
+            const result = await Promise.race([queryPromise, timeoutPromise]);
+            const { data: profile, error: profileError } = result;
             
             console.log('Profile fetch result after registration:', { profile, profileError });
 
