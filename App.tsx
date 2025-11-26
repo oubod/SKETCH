@@ -37,18 +37,25 @@ const LoginPage = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
 
     try {
       if (isLoginMode) {
+        console.log('Attempting login with email:', formData.email);
+        
         // Real Supabase Login
         const { data, error } = await supabase.auth.signInWithPassword({
           email: formData.email,
           password: formData.password,
         });
 
+        console.log('Supabase auth response:', { data, error });
+
         if (error) {
-          setError(error.message);
+          console.error('Supabase auth error:', error);
+          setError(`Erreur d'authentification: ${error.message}`);
           return;
         }
 
         if (data.user) {
+          console.log('User authenticated, fetching profile...');
+          
           // Fetch user profile from database
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
@@ -56,19 +63,32 @@ const LoginPage = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
             .eq('id', data.user.id)
             .single();
 
-          if (profileError || !profile) {
-            setError('Erreur lors du chargement du profil utilisateur.');
+          console.log('Profile fetch result:', { profile, profileError });
+
+          if (profileError) {
+            console.error('Profile fetch error:', profileError);
+            setError(`Erreur profil: ${profileError.message}`);
             return;
           }
 
+          if (!profile) {
+            setError('Profil utilisateur non trouvé. Veuillez vous inscrire.');
+            return;
+          }
+
+          console.log('Login successful, calling onLogin...');
           onLogin({
             id: profile.id,
             email: profile.email,
             name: profile.name,
             year: profile.year_level as YearLevel
           });
+        } else {
+          setError('Aucune donnée utilisateur reçue de Supabase.');
         }
       } else {
+        console.log('Attempting registration with email:', formData.email);
+        
         // Real Supabase Registration
         const { data, error } = await supabase.auth.signUp({
           email: formData.email,
@@ -81,35 +101,51 @@ const LoginPage = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
           }
         });
 
+        console.log('Supabase registration response:', { data, error });
+
         if (error) {
-          setError(error.message);
+          console.error('Supabase registration error:', error);
+          setError(`Erreur d'inscription: ${error.message}`);
           return;
         }
 
         if (data.user) {
-          // For new users, the profile is created automatically by the trigger
-          // But we need to fetch it to get the complete data
+          console.log('User registered, fetching profile...');
+          
+          // Fetch user profile from database
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', data.user.id)
             .single();
 
-          if (profileError || !profile) {
-            setError('Erreur lors du chargement du profil utilisateur.');
+          console.log('Profile fetch result after registration:', { profile, profileError });
+
+          if (profileError) {
+            console.error('Profile fetch error after registration:', profileError);
+            setError(`Erreur profil: ${profileError.message}`);
             return;
           }
 
+          if (!profile) {
+            setError('Profil utilisateur non trouvé après inscription.');
+            return;
+          }
+
+          console.log('Registration successful, calling onLogin...');
           onLogin({
             id: profile.id,
             email: profile.email,
             name: profile.name,
             year: profile.year_level as YearLevel
           });
+        } else {
+          setError('Aucune donnée utilisateur reçue lors de l\'inscription.');
         }
       }
     } catch (err) {
-      setError('Une erreur est survenue. Veuillez réessayer.');
+      console.error('Unexpected error during auth:', err);
+      setError(`Erreur inattendue: ${err instanceof Error ? err.message : 'Veuillez réessayer.'}`);
     } finally {
       setIsLoading(false);
     }
