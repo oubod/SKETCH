@@ -30,6 +30,10 @@ const LoginPage = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
+    
+    // Debug: Log Supabase client initialization
+    console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
+    console.log('Supabase Key exists:', !!import.meta.env.VITE_SUPABASE_ANON_KEY);
 
     try {
       if (isLoginMode) {
