@@ -981,18 +981,18 @@ export default function App() {
     }
   }, [user, deferredPrompt]);
 
-  // Register service worker for PWA
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js')
-        .then((registration) => {
-          console.log('Service Worker registered with scope:', registration.scope);
-        })
-        .catch((error) => {
-          console.error('Service Worker registration failed:', error);
-        });
-    }
-  }, []);
+  // TEMPORARILY DISABLED - Service worker causing infinite refresh
+  // useEffect(() => {
+  //   if ('serviceWorker' in navigator) {
+  //     navigator.serviceWorker.register('/sw.js')
+  //       .then((registration) => {
+  //         console.log('Service Worker registered with scope:', registration.scope);
+  //       })
+  //       .catch((error) => {
+  //         console.error('Service Worker registration failed:', error);
+  //       });
+  //   }
+  // }, []);
 
   // Handle PWA installation
   const handleInstallClick = async () => {
