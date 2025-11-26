@@ -850,6 +850,121 @@ export default function App() {
   const [view, setView] = useState<'dashboard' | 'planning' | 'repetition' | 'subject'>('dashboard');
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // PWA Install Prompt State
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+
+  // Check for existing session on mount and PWA install prompt
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        // Fetch user profile from database
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (!profileError && profile) {
+          setUser({
+            id: profile.id,
+            email: profile.email,
+            name: profile.name,
+            year: profile.year_level as YearLevel
+          });
+        }
+      }
+    };
+
+    // Listen for PWA install prompt
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        // Fetch user profile from database
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (!profileError && profile) {
+          setUser({
+            id: profile.id,
+            email: profile.email,
+            name: profile.name,
+            year: profile.year_level as YearLevel
+          });
+
+          // Install prompt logic handled in separate useEffect
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setShowInstallPrompt(false);
+      }
+    });
+
+    checkSession();
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, [deferredPrompt]);
+
+  // Separate useEffect for PWA install prompt logic
+  useEffect(() => {
+    if (user && deferredPrompt) {
+      const installDismissed = localStorage.getItem('pwa-install-dismissed');
+      if (!installDismissed) {
+        setTimeout(() => {
+          setShowInstallPrompt(true);
+        }, 3000); // Show after 3 seconds
+      }
+    }
+  }, [user, deferredPrompt]);
+
+  // Register service worker for PWA
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js')
+        .then((registration) => {
+          console.log('Service Worker registered with scope:', registration.scope);
+        })
+        .catch((error) => {
+          console.error('Service Worker registration failed:', error);
+        });
+    }
+  }, []);
+
+  // Handle PWA installation
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    
+    if (outcome === 'accepted') {
+      console.log('PWA installation accepted');
+    } else {
+      console.log('PWA installation dismissed');
+    }
+    
+    setDeferredPrompt(null);
+    setShowInstallPrompt(false);
+  };
+
+  const handleInstallDismiss = () => {
+    setShowInstallPrompt(false);
+    localStorage.setItem('pwa-install-dismissed', 'true');
+  };
+
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().then(() => setIsFullscreen(true));
@@ -876,7 +991,8 @@ export default function App() {
     setCurrentYear(currentYear === year ? null : year);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
     setView('dashboard');
     setCurrentSubject(null);
@@ -890,45 +1006,84 @@ export default function App() {
   return (
     <div className="h-[100dvh] flex flex-col bg-paper overflow-hidden text-sketch-black font-sans selection:bg-marker-yellow/30">
       
+      {/* PWA Install Prompt */}
+      {showInstallPrompt && (
+        <div className="bg-gradient-to-r from-marker-yellow via-marker-pink to-marker-blue border-b-2 border-sketch-black p-3 animate-in slide-in-from-top duration-500">
+          <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-sketch-black rounded-lg flex items-center justify-center text-white font-black text-lg">M</div>
+              <div>
+                <p className="font-bold text-sm">Installez MediSketch</p>
+                <p className="text-xs opacity-75">Accès rapide hors ligne • Meilleure expérience</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={handleInstallClick}
+                className="bg-sketch-black text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-gray-800 transition-colors"
+              >
+                Installer
+              </button>
+              <button 
+                onClick={handleInstallDismiss}
+                className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+                title="Plus tard"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* HEADER */}
-      <header className="h-16 border-b-2 border-sketch-black bg-white flex items-center px-4 justify-between z-40 shrink-0 shadow-sm relative">
-        <div className="flex items-center gap-4">
+      <header className="h-16 border-b-2 border-sketch-black bg-white flex items-center px-2 sm:px-4 justify-between z-40 shrink-0 shadow-sm relative">
+        <div className="flex items-center gap-2 sm:gap-4">
           <button onClick={() => setMobileMenuOpen(true)} className="md:hidden p-2 hover:bg-gray-100 rounded-lg">
-            <Menu size={24} />
+            <Menu size={20} />
           </button>
           <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="hidden md:block p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-sketch-black transition-colors">
             {isSidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
           </button>
           
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setView('dashboard'); setCurrentSubject(null); }}>
-             <div className="w-8 h-8 bg-sketch-black rounded-lg flex items-center justify-center text-white font-black text-xl">M</div>
-             <span className="font-hand font-bold text-2xl hidden sm:block">MediSketch</span>
+             <div className="w-7 h-7 sm:w-8 sm:h-8 bg-sketch-black rounded-lg flex items-center justify-center text-white font-black text-lg sm:text-xl">M</div>
+             <span className="font-hand font-bold text-lg sm:text-2xl hidden xs:block sm:block">MediSketch</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 md:gap-4">
+        <div className="flex items-center gap-1 sm:gap-2 md:gap-4">
           <button 
-            onClick={() => setView('planning')}
-            className={`p-2 rounded-lg transition-colors flex items-center gap-2 font-bold text-sm ${view === 'planning' ? 'bg-marker-yellow' : 'hover:bg-gray-100'}`}
+            onClick={() => setView('dashboard')} 
+            className={`p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors ${view === 'dashboard' ? 'bg-gray-200 text-sketch-black' : 'text-gray-500'}`}
+            title="Accueil"
           >
-            <Layout size={20} /> <span className="hidden md:inline">Planning</span>
+            <Home size={18} /> <span className="hidden sm:inline text-xs sm:text-base">Accueil</span>
           </button>
           <button 
-             onClick={() => setView('repetition')}
-             className={`p-2 rounded-lg transition-colors flex items-center gap-2 font-bold text-sm ${view === 'repetition' ? 'bg-marker-blue' : 'hover:bg-gray-100'}`}
+            onClick={() => setView('planning')} 
+            className={`p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors ${view === 'planning' ? 'bg-gray-200 text-sketch-black' : 'text-gray-500'}`}
+            title="Planning"
           >
-            <RefreshCw size={20} /> <span className="hidden md:inline">Révision</span>
+            <CalendarIcon size={18} /> <span className="hidden sm:inline text-xs sm:text-base">Planning</span>
           </button>
-          <div className="w-px h-6 bg-gray-300 mx-1" />
-          <button onClick={() => setIsNotesOpen(true)} className="p-2 hover:bg-gray-100 rounded-lg relative">
-            <PenTool size={20} />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white" />
+          <button 
+            onClick={() => setView('repetition')} 
+            className={`p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors ${view === 'repetition' ? 'bg-gray-200 text-sketch-black' : 'text-gray-500'}`}
+            title="Révision"
+          >
+            <RefreshCw size={18} /> <span className="hidden sm:inline text-xs sm:text-base">Révision</span>
           </button>
-          <button onClick={toggleFullscreen} className="p-2 hover:bg-gray-100 rounded-lg hidden md:block">
-            {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+          <div className="hidden sm:block w-px h-6 bg-gray-300 mx-1" />
+          <button onClick={() => setIsNotesOpen(true)} className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg relative" title="Notes">
+            <PenTool size={18} />
+            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white" />
           </button>
-          <button onClick={handleLogout} className="p-2 hover:bg-red-50 text-red-500 rounded-lg" title="Se déconnecter">
-            <LogOut size={20} />
+          <button onClick={toggleFullscreen} className="hidden md:block p-2 hover:bg-gray-100 rounded-lg" title="Plein écran">
+            {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+          </button>
+          <button onClick={handleLogout} className="p-1.5 sm:p-2 hover:bg-red-50 text-red-500 rounded-lg" title="Se déconnecter">
+            <LogOut size={18} />
           </button>
         </div>
       </header>
