@@ -894,7 +894,7 @@ export default function App() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
 
-  // Check for existing session on mount and PWA install prompt
+  // Check for existing session on mount (separate from PWA logic)
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -917,12 +917,6 @@ export default function App() {
       }
     };
 
-    // Listen for PWA install prompt
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
@@ -940,8 +934,6 @@ export default function App() {
             name: profile.name,
             year: profile.year_level as YearLevel
           });
-
-          // Install prompt logic handled in separate useEffect
         }
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -950,13 +942,19 @@ export default function App() {
     });
 
     checkSession();
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => subscription.unsubscribe();
+  }, []); // Empty dependency array - only runs once
 
-    return () => {
-      subscription.unsubscribe();
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  // Separate useEffect for PWA install prompt listener
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
     };
-  }, [deferredPrompt]);
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []); // Empty dependency array
 
   // Separate useEffect for PWA install prompt logic
   useEffect(() => {
